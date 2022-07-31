@@ -1,11 +1,14 @@
 import json
-from flask import request, _request_ctx_stack, abort, request
+from os import abort
+from flask import request, _request_ctx_stack
 from functools import wraps
 from jose import jwt
 from urllib.request import urlopen
+import sys
 
 
-AUTH0_DOMAIN = 'dev-coffee-shop-project.us'
+# from settings import AUTH0_DOMAIN, ALGORITHMS, API_AUDIENCE
+AUTH0_DOMAIN = 'dev-coffee-shop-project.us.auth0.com'
 ALGORITHMS = ['RS256']
 API_AUDIENCE = 'coffeeShop'
 
@@ -31,21 +34,35 @@ class AuthError(Exception):
     it should attempt to split bearer and the token
         it should raise an AuthError if the header is malformed
     return the token part of the header
+    print(sys.exc_info())
+        raise AuthError({
+            'status code': 401,
+            'error': 'unauthorized'
+        }, 401)
 '''
 
-def get_token_auth_header():    
-    auth_header = request.headers['Authorization']
+def get_token_auth_header():
+    # check if authorization is not in request
     if 'Authorization' not in request.headers:
-        abort(401)
-    header_parts = auth_header.split(' ')[1]
+        raise AuthError({
+            'status code': 401,
+            'error': 'unauthorized'
+        }, 401)
+# get the token   
+    auth_header = request.headers['Authorization']
+    header_parts = auth_header.split(' ')
+# check if token is valid
     if len(header_parts) != 2:
-        abort(401)
+        raise AuthError({
+            'status code': 401,
+            'error': 'unauthorized'
+        }, 401)
     elif header_parts[0].lower() != 'bearer':
-        abort(401) 
-    # raise Exception('Not Implemented')
-    print(header_parts)
+        raise AuthError({
+            'status code': 401,
+            'error': 'unauthorized'
+        }, 401) 
     return header_parts[1]
-
 
 '''
 @TODO implement check_permissions(permission, payload) method
@@ -87,10 +104,10 @@ def check_permissions(permission, payload):
     !!NOTE urlopen has a common certificate error described here: https://stackoverflow.com/questions/50236117/scraping-ssl-certificate-verify-failed-error-for-http-en-wikipedia-org
 '''
 
+## Auth Header
 def verify_decode_jwt(token):
-    # raise Exception('Not Implemented')
     # GET THE PUBLIC KEY FROM AUTH0
-    jsonurl = urlopen(f'https://dev-coffee-shop-project.us.auth0.com/.well-known/jwks.json')
+    jsonurl = urlopen(f'https://{AUTH0_DOMAIN}/.well-known/jwks.json')
     jwks = json.loads(jsonurl.read())
     
     # GET THE DATA IN THE HEADER
@@ -121,9 +138,9 @@ def verify_decode_jwt(token):
             payload = jwt.decode(
                 token,
                 rsa_key,
-                algorithms='RS256',
-                audience='coffeeShop',
-                issuer='https://' + 'dev-coffee-shop-project.us.auth0.com' + '/'
+                algorithms=ALGORITHMS,
+                audience=API_AUDIENCE,
+                issuer='https://' + AUTH0_DOMAIN + '/'
             )
 
             return payload
@@ -165,9 +182,12 @@ def requires_auth(permission=''):
         @wraps(f)
         def wrapper(*args, **kwargs):
             token = get_token_auth_header()
-            payload = verify_decode_jwt(token)
+            try:
+                payload = verify_decode_jwt(token)
+            except:
+                abort()
             check_permissions(permission, payload)
-            return f(payload, *args, **kwargs)
+            return f(*args, **kwargs)
 
         return wrapper
     return requires_auth_decorator

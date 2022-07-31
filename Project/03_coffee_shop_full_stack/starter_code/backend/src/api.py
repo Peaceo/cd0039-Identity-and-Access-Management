@@ -28,6 +28,7 @@ def hello():
 db_drop_and_create_all()
 
 # ROUTES
+
 '''
 @TODO implement endpoint
     GET /drinks
@@ -38,13 +39,11 @@ db_drop_and_create_all()
 '''
 @app.route('/drinks', methods = ['GET'])
 def get_drinks():
-    drinks = [short.short() for short in Drink.query.all()]
+    drinks = [drink.short() for drink in Drink.query.all()]
     return jsonify ({
         "success": True,
         "drinks": drinks
     })
-
-
 '''
 @TODO implement endpoint
     GET /drinks-detail
@@ -53,19 +52,20 @@ def get_drinks():
     returns status code 200 and json {"success": True, "drinks": drinks} where drinks is the list of drinks
         or appropriate status code indicating reason for failure
 '''
-@app.route('/drinks-details', methods = ['GET'])
+@app.route('/drinks-detail', methods = ['GET'])
 @requires_auth('get:drinks-detail')
-def get_drinks_details(jwt):
+def get_drinks_details():
+    
     try:
-        drinks = [long.long() for long in Drink.query.all()]
-
-    except:
+        drinks = [drink.long() for drink in Drink.query.all()]
+    except AuthError as err:
         abort(422)
+          
     return jsonify({
+        "status code": 200,
         "success":True,
         "drinks":drinks
     })
-
 
 
 '''
@@ -79,19 +79,17 @@ def get_drinks_details(jwt):
 '''
 @app.route('/drinks', methods = ['POST'])
 @requires_auth('post:drinks')
-def post_drinks(jwt):
+def post_drinks():
     body = request.get_json()
-    try:
-        recipe = body.get('recipe', None)
-        if isinstance(recipe, dict):
-            recipe = [recipe]
-        elif not isinstance(recipe, list):
-            abort(422)
-        drink = Drink(title=body.get("title"), recipe=json.dumps(recipe))
+    recipe = body.get('recipe', None)
+    title = body.get('title', None)
+    try: 
+        drink = Drink(title=title, recipe=json.dumps(recipe))
         drink.insert()
-    except:
+    except AuthError as error:
         abort(422)
     return jsonify({
+                    "status code": 200,
                     "success":True, 
                     "drinks":[drink.long()]
         })
@@ -111,22 +109,25 @@ def post_drinks(jwt):
 '''
 @app.route('/drinks/<id>', methods = ['PATCH'])
 @requires_auth('patch:drinks')
-def patch_drinks(jwt, id):
+def patch_drinks(id):
     body = request.get_json()
-    drink = Drink.query.get(id)
-    if not drink:
-        abort(404)
+    title = body.get("title", None)
+    recipe = body.get("recipe", None)
     try:
-        drink.title = body.get("title", drink.title)
-        recipe = body.get("recipe")
-        if isinstance(recipe, dict):
-            recipe = [recipe]
-        if isinstance(recipe, list):
-            drink.recipe = json.dumps(recipe)
-        drink.update()
-    except Exception as e:
+        drink = Drink.query.filter(Drink.id == id).first()
+        if not drink:
+            abort(404)
+        if title:
+            drink.title = title
+            drink.recipe = recipe if type(recipe) == str else json.dumps(recipe)
+
+            drink.update()
+    except Exception as err:
         abort(422)
-    return jsonify(success=True, drinks=[drink.long()])
+    return jsonify({
+        "status code": 200,
+        "success": True, 
+        "drinks": [drink.long()]})
 
 '''
 @TODO implement endpoint
@@ -140,16 +141,20 @@ def patch_drinks(jwt, id):
 '''
 @app.route("/drinks/<id>", methods=["DELETE"])
 @requires_auth("delete:drinks")
-def delete_drink(jwt, id):
-    body = request.get_json()
-    drink = Drink.query.get(id)
-    if not drink:
-        abort(404)
+def delete_drink(id):
+    
     try:
+        drink = Drink.query.filter(Drink.id == id).one_or_none()
+        if not drink:
+            abort(404)
         drink.delete()
     except:
         abort(422)
-    return jsonify(success=True, delete=id)
+    return jsonify({
+        "status code": 200,
+        "success":True, 
+        "deleted":id
+        })
 
 
 # Error Handling
